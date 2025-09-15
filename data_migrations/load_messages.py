@@ -134,8 +134,10 @@ class MessageLoader:
             """
             )
 
-            result = conn.execute(insert_query, valid_rows)
-            inserted = result.rowcount
+            # Execute with autocommit behavior - each batch gets its own transaction
+            with conn.begin():
+                result = conn.execute(insert_query, valid_rows)
+                inserted = result.rowcount
 
             logger.info(
                 f"Batch processed: {inserted} inserted, {len(batch) - len(valid_rows)} invalid, "
@@ -188,22 +190,17 @@ class MessageLoader:
                     return self.stats
 
                 # Process in batches
-                with local_conn.begin() as trans:
-                    for batch_num, batch in enumerate(
-                        self.chunk_data(rows, BATCH_SIZE), 1
-                    ):
-                        logger.info(
-                            f"Processing batch {batch_num} ({len(batch)} rows)..."
-                        )
+                for batch_num, batch in enumerate(self.chunk_data(rows, BATCH_SIZE), 1):
+                    logger.info(f"Processing batch {batch_num} ({len(batch)} rows)...")
 
-                        # Convert rows to dictionaries
-                        batch_data = [dict(row._mapping) for row in batch]
+                    # Convert rows to dictionaries
+                    batch_data = [dict(row._mapping) for row in batch]
 
-                        inserted, failed = self.insert_batch(local_conn, batch_data)
+                    inserted, failed = self.insert_batch(local_conn, batch_data)
 
-                        self.stats["inserted"] += inserted
-                        self.stats["failed"] += failed
-                        self.stats["skipped"] += len(batch) - inserted - failed
+                    self.stats["inserted"] += inserted
+                    self.stats["failed"] += failed
+                    self.stats["skipped"] += len(batch) - inserted - failed
 
                 logger.info("Loading completed successfully")
 
