@@ -46,8 +46,9 @@ class MessageLoader:
         if not server_db_url or not local_db_url:
             raise ValueError("Both SERVER_DB_URL and LOCAL_DB_URL must be provided")
 
-        self.server_engine = create_engine(server_db_url)
-        self.local_engine = create_engine(local_db_url)
+        # Create engines with autocommit isolation level to avoid transaction issues
+        self.server_engine = create_engine(server_db_url, isolation_level="AUTOCOMMIT")
+        self.local_engine = create_engine(local_db_url, isolation_level="AUTOCOMMIT")
         self.stats = {"fetched": 0, "inserted": 0, "skipped": 0, "failed": 0}
 
     @contextmanager
@@ -134,10 +135,9 @@ class MessageLoader:
             """
             )
 
-            # Execute with autocommit behavior - each batch gets its own transaction
-            with conn.begin():
-                result = conn.execute(insert_query, valid_rows)
-                inserted = result.rowcount
+            # Execute with autocommit - no explicit transaction needed
+            result = conn.execute(insert_query, valid_rows)
+            inserted = result.rowcount
 
             logger.info(
                 f"Batch processed: {inserted} inserted, {len(batch) - len(valid_rows)} invalid, "
