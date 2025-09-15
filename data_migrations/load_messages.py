@@ -135,9 +135,17 @@ class MessageLoader:
             """
             )
 
-            # Execute with autocommit - no explicit transaction needed
-            result = conn.execute(insert_query, valid_rows)
-            inserted = result.rowcount
+            # Execute batch insert - process each row individually to avoid dict adaptation issues
+            inserted_count = 0
+            for row in valid_rows:
+                try:
+                    result = conn.execute(insert_query, row)
+                    inserted_count += result.rowcount
+                except SQLAlchemyError as row_error:
+                    logger.warning(f"Failed to insert individual row: {row_error}")
+                    failed += 1
+
+            inserted = inserted_count
 
             logger.info(
                 f"Batch processed: {inserted} inserted, {len(batch) - len(valid_rows)} invalid, "
