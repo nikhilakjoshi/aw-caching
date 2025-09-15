@@ -10,6 +10,7 @@ import os
 import sys
 import argparse
 import logging
+import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
@@ -106,6 +107,26 @@ class MessageLoader:
                 return False
         return True
 
+    def prepare_row_for_insert(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare a row for insertion by serializing complex types."""
+        prepared_row = row.copy()
+
+        # Serialize JSONB fields to JSON strings if they're not already
+        if "parts" in prepared_row and prepared_row["parts"] is not None:
+            if isinstance(prepared_row["parts"], (dict, list)):
+                prepared_row["parts"] = json.dumps(prepared_row["parts"])
+
+        if "annotations" in prepared_row and prepared_row["annotations"] is not None:
+            if isinstance(prepared_row["annotations"], (dict, list)):
+                prepared_row["annotations"] = json.dumps(prepared_row["annotations"])
+
+        # Debug: Log the types of all fields for the first few rows
+        if logger.level == logging.DEBUG:
+            for key, value in prepared_row.items():
+                logger.debug(f"Field '{key}': {type(value)} = {str(value)[:100]}...")
+
+        return prepared_row
+
     def insert_batch(
         self, conn: Connection, batch: List[Dict[str, Any]]
     ) -> tuple[int, int]:
@@ -139,7 +160,9 @@ class MessageLoader:
             inserted_count = 0
             for row in valid_rows:
                 try:
-                    result = conn.execute(insert_query, row)
+                    # Prepare the row by serializing complex types
+                    prepared_row = self.prepare_row_for_insert(row)
+                    result = conn.execute(insert_query, prepared_row)
                     inserted_count += result.rowcount
                 except SQLAlchemyError as row_error:
                     logger.warning(f"Failed to insert individual row: {row_error}")
