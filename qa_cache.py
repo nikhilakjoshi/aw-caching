@@ -296,6 +296,25 @@ class QACache:
 
 
 # Dependency function for FastAPI
+def get_qa_cache_factory():
+    """
+    Factory function to create QACache dependency with database session injection.
+
+    Returns:
+        Function that creates QACache with injected db_session
+    """
+
+    def _get_qa_cache(db_session: AsyncSession) -> QACache:
+        return QACache(
+            db_session=db_session,
+            similarity_threshold=0.85,  # Can be configured via environment
+            created_by="api",
+        )
+
+    return _get_qa_cache
+
+
+# FastAPI dependency
 async def get_qa_cache(db_session: AsyncSession) -> QACache:
     """
     FastAPI dependency function to get QACache instance.

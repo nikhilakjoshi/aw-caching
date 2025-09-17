@@ -80,6 +80,18 @@ async def get_db_session() -> AsyncSession:
             await session.close()
 
 
+# QACache dependency that uses the database session
+async def get_cache_with_session(
+    db_session: AsyncSession = Depends(get_db_session),
+) -> QACache:
+    """Get QACache instance with database session."""
+    return QACache(
+        db_session=db_session,
+        similarity_threshold=0.85,  # Can be configured via environment
+        created_by="api",
+    )
+
+
 # Mock functions (replace with your actual implementations)
 async def vagueness_check(question: str) -> bool:
     """
@@ -131,8 +143,7 @@ async def do_rag(rephrased_question: str) -> str:
 @app.post("/qna", response_model=AnswerResponse)
 async def qna_endpoint(
     req: QuestionRequest,
-    cache: QACache = Depends(get_qa_cache),
-    db_session: AsyncSession = Depends(get_db_session),
+    cache: QACache = Depends(get_cache_with_session),
 ) -> AnswerResponse:
     """
     Main QnA endpoint with caching support.
@@ -212,7 +223,9 @@ async def qna_endpoint(
 
 # Cache management endpoints
 @app.get("/cache/stats", response_model=CacheStatsResponse)
-async def get_cache_stats(cache: QACache = Depends(get_qa_cache)) -> CacheStatsResponse:
+async def get_cache_stats(
+    cache: QACache = Depends(get_cache_with_session),
+) -> CacheStatsResponse:
     """Get cache statistics."""
     try:
         stats = await cache.stats()
@@ -227,7 +240,7 @@ async def get_cache_stats(cache: QACache = Depends(get_qa_cache)) -> CacheStatsR
 
 @app.delete("/cache/clear")
 async def clear_cache(
-    confirm: bool = False, cache: QACache = Depends(get_qa_cache)
+    confirm: bool = False, cache: QACache = Depends(get_cache_with_session)
 ) -> dict:
     """
     Clear all cache entries.
